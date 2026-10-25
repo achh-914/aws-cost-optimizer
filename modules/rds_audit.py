@@ -1,34 +1,37 @@
 import boto3
 
-def audit_rds_resources():
+def audit_rds_resources(session=None):
     """
-    Audits RDS instances and manual snapshots.
+    Audits RDS instances and manual snapshots using paginators.
     """
-    print("[*] Scanning RDS instances and manual snapshots...")
-    rds_client = boto3.client('rds')
+    rds_client = session.client('rds') if session else boto3.client('rds')
     
-    # 1. Stopped RDS instances
-    response = rds_client.describe_db_instances()
+    # 1. Stopped RDS instances (using Paginator)
+    db_paginator = rds_client.get_paginator('describe_db_instances')
     stopped_rds = []
-    for db in response.get('DBInstances', []):
-        if db['DBInstanceStatus'] in ['stopped', 'stopping']:
-            stopped_rds.append({
-                'DBInstanceIdentifier': db['DBInstanceIdentifier'],
-                'Engine': db['Engine'],
-                'InstanceClass': db['DBInstanceClass'],
-                'Status': db['DBInstanceStatus']
-            })
-            
-    # 2. Manual Snapshots
-    snapshots_response = rds_client.describe_db_snapshots(SnapshotType='manual')
+    
+    for page in db_paginator.paginate():
+        for db in page.get('DBInstances', []):
+            if db['DBInstanceStatus'] in ['stopped', 'stopping']:
+                stopped_rds.append({
+                    'DBInstanceIdentifier': db['DBInstanceIdentifier'],
+                    'Engine': db['Engine'],
+                    'InstanceClass': db['DBInstanceClass'],
+                    'Status': db['DBInstanceStatus']
+                })
+                
+    # 2. Manual Snapshots (using Paginator)
+    snap_paginator = rds_client.get_paginator('describe_db_snapshots')
     manual_snapshots = []
-    for snap in snapshots_response.get('DBSnapshots', []):
-        manual_snapshots.append({
-            'DBSnapshotIdentifier': snap['DBSnapshotIdentifier'],
-            'DBInstanceIdentifier': snap['DBInstanceIdentifier'],
-            'SnapshotCreateTime': str(snap['SnapshotCreateTime']),
-            'AllocatedStorage': snap.get('AllocatedStorage', 0)
-        })
+    
+    for page in snap_paginator.paginate(SnapshotType='manual'):
+        for snap in page.get('DBSnapshots', []):
+            manual_snapshots.append({
+                'DBSnapshotIdentifier': snap['DBSnapshotIdentifier'],
+                'DBInstanceIdentifier': snap['DBInstanceIdentifier'],
+                'SnapshotCreateTime': str(snap['SnapshotCreateTime']),
+                'AllocatedStorage': snap.get('AllocatedStorage', 0)
+            })
 
     return {
         "stopped_rds": stopped_rds,
