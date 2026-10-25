@@ -1,42 +1,43 @@
 import boto3
+from botocore.exceptions import NoCredentialsError, NoRegionError, ClientError
 
 def audit_ec2_resources():
     """
-    Audits EC2 instances to find stopped ones and unattached Elastic IPs.
+    Audits EC2 instances for stopped states and unused Elastic IPs.
     """
-    ec2_client = boto3.client('ec2')
-    
     print("[*] Scanning EC2 instances and Elastic IPs...")
-    
-    # 1. Check for stopped EC2 instances
-    response = ec2_client.describe_instances()
-    stopped_instances = []
-    
-    for reservation in response.get('Reservations', []):
-        for instance in reservation.get('Instances', []):
-            instance_id = instance['InstanceId']
-            state = instance['State']['Name']
-            if state == 'stopped':
+    try:
+        ec2_client = boto3.client('ec2')
+        
+        # 1. Stopped EC2 Instances
+        response = ec2_client.describe_instances(
+            Filters=[{'Name': 'instance-state-name', 'Values': ['stopped']}]
+        )
+        
+        stopped_instances = []
+        for reservation in response.get('Reservations', []):
+            for instance in reservation.get('Instances', []):
                 stopped_instances.append({
-                    'InstanceId': instance_id,
+                    'InstanceId': instance['InstanceId'],
                     'Type': instance['InstanceType'],
-                    'State': state
+                    'State': instance['State']['Name']
                 })
 
-    # 2. Check for unattached Elastic IPs
-    addresses_response = ec2_client.describe_addresses()
-    unused_eips = []
-    
-    for addr in addresses_response.get('Addresses', []):
-        if 'InstanceId' not in addr and 'NetworkInterfaceId' not in addr:
-            unused_eips.append(addr.get('PublicIp'))
+        # 2. Unused Elastic IPs
+        eips_response = ec2_client.describe_addresses()
+        unused_eips = []
+        for address in eips_response.get('Addresses', []):
+            if 'InstanceId' not in address and 'NetworkInterfaceId' not in address:
+                unused_eips.append(address.get('PublicIp'))
 
-    return {
-        "stopped_instances": stopped_instances,
-        "unused_eips": unused_eips
-    }
+        return {
+            "stopped_instances": stopped_instances,
+            "unused_eips": unused_eips
+        }
+    except (NoCredentialsError, NoRegionError, ClientError) as e:
+        print(f"[!] AWS Authentication/Region Warning: {e}")
+        return {"stopped_instances": [], "unused_eips": []}
 
 if __name__ == "__main__":
     result = audit_ec2_resources()
-    print("Stopped Instances:", result["stopped_instances"])
-    print("Unused EIPs:", result["unused_eips"])
+    print("EC2 Audit Result:", result)
