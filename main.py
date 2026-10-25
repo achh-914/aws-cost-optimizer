@@ -1,3 +1,4 @@
+import sys
 from modules.ec2_audit import audit_ec2_resources
 from modules.ebs_audit import audit_ebs_volumes
 from modules.rds_audit import audit_rds_resources
@@ -8,12 +9,15 @@ def main():
     print("      Starting AWS Cost Audit & Optimization Tool     ")
     print("======================================================")
     
-    # Run Audits
-    ec2_data = audit_ec2_resources()
-    ebs_data = audit_ebs_volumes()
-    rds_data = audit_rds_resources()
+    try:
+        ec2_data = audit_ec2_resources()
+        ebs_data = audit_ebs_volumes()
+        rds_data = audit_rds_resources()
+    except Exception as e:
+        print(f"\n[!] Critical Audit Failure: Unable to fetch AWS data. Error: {e}")
+        sys.exit(1)
     
-    # Generate final comprehensive report
+    # Generate final comprehensive report with cost estimation
     generate_report(ec2_data, ebs_data, rds_data)
 
 if __name__ == "__main__":
